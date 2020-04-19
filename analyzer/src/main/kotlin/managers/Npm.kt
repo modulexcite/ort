@@ -49,16 +49,6 @@ import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.jsonMapper
 import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.spdx.SpdxLicense
-import org.ossreviewtoolkit.utils.CommandLineTool
-import org.ossreviewtoolkit.utils.Os
-import org.ossreviewtoolkit.utils.OkHttpClientHelper
-import org.ossreviewtoolkit.utils.OkHttpClientHelper.applyProxySettingsFromUrl
-import org.ossreviewtoolkit.utils.getUserHomeDirectory
-import org.ossreviewtoolkit.utils.isSymbolicLink
-import org.ossreviewtoolkit.utils.log
-import org.ossreviewtoolkit.utils.realFile
-import org.ossreviewtoolkit.utils.stashDirectories
-import org.ossreviewtoolkit.utils.textValueOrEmpty
 
 import com.vdurmont.semver4j.Requirement
 
@@ -71,6 +61,8 @@ import java.util.SortedSet
 
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.ossreviewtoolkit.utils.*
+import java.net.ProxySelector
 
 /**
  * The [Node package manager](https://www.npmjs.com/) for JavaScript.
@@ -104,10 +96,20 @@ open class Npm(
 
     override fun mapDefinitionFiles(definitionFiles: List<File>) = mapDefinitionFilesForNpm(definitionFiles).toList()
 
-    override fun beforeResolution(definitionFiles: List<File>) =
+    override fun beforeResolution(definitionFiles: List<File>) {
         // We do not actually depend on any features specific to an NPM version, but we still want to stick to a
         // fixed minor version to be sure to get consistent results.
         checkVersion(analyzerConfig.ignoreToolVersions)
+
+        val npmRcFile = getUserHomeDirectory().resolve(".npmrc")
+        if (npmRcFile.isFile) {
+            ortProxySelector.addProxyOrigin(managerName, readProxySettingFromNpmRc(npmRcFile.readText()))
+        }
+    }
+
+    override fun afterResolution(definitionFiles: List<File>) {
+        ortProxySelector.removeProxyOrigin(managerName)
+    }
 
     override fun resolveDependencies(definitionFile: File): ProjectAnalyzerResult? {
         val workingDir = definitionFile.parentFile
@@ -135,15 +137,6 @@ open class Npm(
                 definitionFile, sortedSetOf(dependenciesScope, devDependenciesScope),
                 packages.values.toSortedSet()
             )
-        }
-    }
-
-    private val applyProxySettingsFromNpmRc: OkHttpClient.Builder.() -> Unit = {
-        val npmRcFile = getUserHomeDirectory().resolve(".npmrc")
-        if (npmRcFile.isFile) {
-            readProxySettingFromNpmRc(npmRcFile.readText())?.let { proxyUrl ->
-                applyProxySettingsFromUrl(URL(proxyUrl))
-            }
         }
     }
 
@@ -244,7 +237,7 @@ open class Npm(
                     .url("https://registry.npmjs.org/$encodedName")
                     .build()
 
-                OkHttpClientHelper.execute(HTTP_CACHE_PATH, pkgRequest, applyProxySettingsFromNpmRc).use { response ->
+                OkHttpClientHelper.execute(HTTP_CACHE_PATH, pkgRequest).use { response ->
                     if (response.code == HttpURLConnection.HTTP_OK) {
                         log.debug {
                             if (response.cacheResponse != null) {

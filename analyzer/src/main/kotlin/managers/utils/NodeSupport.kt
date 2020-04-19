@@ -25,17 +25,20 @@ import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.node.ArrayNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 
-import org.ossreviewtoolkit.model.readValue
-import org.ossreviewtoolkit.utils.collectMessagesAsString
-import org.ossreviewtoolkit.utils.hasRevisionFragment
-import org.ossreviewtoolkit.utils.log
-import org.ossreviewtoolkit.utils.showStackTrace
-
 import java.io.File
+import java.net.Proxy
 import java.net.URI
 import java.net.URISyntaxException
 import java.nio.file.FileSystems
 import java.nio.file.PathMatcher
+
+import org.ossreviewtoolkit.model.readValue
+import org.ossreviewtoolkit.utils.ProxyMap
+import org.ossreviewtoolkit.utils.collectMessagesAsString
+import org.ossreviewtoolkit.utils.hasRevisionFragment
+import org.ossreviewtoolkit.utils.log
+import org.ossreviewtoolkit.utils.showStackTrace
+import org.ossreviewtoolkit.utils.toProxy
 
 /**
  * Return whether the [directory] contains an NPM lock file.
@@ -108,30 +111,25 @@ fun expandNpmShortcutURL(url: String): String {
 }
 
 /**
- * Extract any proxy URL from [NPM configuration][npmRc], return null if no proxy URL is configured.
+ * Return all proxies defined in the provided [NPM configuration][npmRc].
  */
-fun readProxySettingFromNpmRc(npmRc: String): String? {
-    var proxyUrl: String? = null
+fun readProxySettingFromNpmRc(npmRc: String): ProxyMap {
+    val httpProxies = mutableListOf<Proxy>()
+    val httpsProxies = mutableListOf<Proxy>()
 
     npmRc.lines().forEach { line ->
         val keyAndValue = line.split('=', limit = 2).map { it.trim() }
         if (keyAndValue.size != 2) return@forEach
 
         val (key, value) = keyAndValue
-        if (key != "proxy" && key != "https-proxy") return@forEach
-
-        if (value.matches(HTTP_REGEX)) {
-            proxyUrl = value
-        } else if (value.isNotBlank() && value != "null") {
-            // Note that even HTTPS proxies use "http://" as the protocol!
-            proxyUrl = "http://$value"
+        when (key) {
+            "proxy" -> value.toProxy()?.let { httpProxies += it }
+            "https-proxy" -> value.toProxy()?.let { httpsProxies += it }
         }
     }
 
-    return proxyUrl
+    return mapOf("http" to httpProxies, "https" to httpsProxies)
 }
-
-private val HTTP_REGEX = Regex("^https?://.+$")
 
 private val NPM_LOCK_FILES = listOf("npm-shrinkwrap.json", "package-lock.json")
 private val YARN_LOCK_FILES = listOf("yarn.lock")

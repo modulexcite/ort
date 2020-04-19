@@ -89,6 +89,7 @@ import org.eclipse.aether.transfer.AbstractTransferListener
 import org.eclipse.aether.transfer.NoRepositoryConnectorException
 import org.eclipse.aether.transfer.NoRepositoryLayoutException
 import org.eclipse.aether.transfer.TransferEvent
+import org.eclipse.aether.util.repository.JreProxySelector
 
 fun Artifact.identifier() = "$groupId:$artifactId:$version"
 
@@ -270,12 +271,6 @@ class MavenSupport(workspaceReader: WorkspaceReader) {
         //       system properties "org.apache.maven.global-settings" and "org.apache.maven.user-settings".
         val settings = settingsBuilder.buildSettings()
 
-        Os.proxy?.let { proxyUrl ->
-            // Maven only uses the first active proxy for both HTTP and HTTPS traffic.
-            settings.proxies.add(createProxyFromUrl(proxyUrl))
-            log.debug { "Added $proxyUrl as proxy." }
-        }
-
         populator.populateFromSettings(request, settings)
         populator.populateDefaults(request)
 
@@ -306,6 +301,7 @@ class MavenSupport(workspaceReader: WorkspaceReader) {
         )
 
         return DefaultRepositorySystemSession(session).setWorkspaceReader(workspaceReader)
+            .setProxySelector(JreProxySelector())
     }
 
     fun buildMavenProject(pomFile: File): ProjectBuildingResult {
