@@ -48,41 +48,17 @@ object OkHttpClientHelper {
     /**
      * Apply HTTP proxy settings from a [url], optionally with credentials included.
      */
-    fun OkHttpClient.Builder.applyProxySettingsFromUrl(url: URL): OkHttpClient.Builder {
-        if (url.host.isEmpty()) return this
-
-        val port = url.port.takeIf { it in IntRange(0, 65535) } ?: 8080
-        proxy(Proxy(Proxy.Type.HTTP, InetSocketAddress(url.host, port)))
-
-        if (url.userInfo == null) return this
-
+    fun OkHttpClient.Builder.applyProxyAuthenticator(): OkHttpClient.Builder {
         proxyAuthenticator(object : Authenticator {
             override fun authenticate(route: Route?, response: Response): Request? {
-                val user = url.userInfo.substringBefore(':')
-                val password = url.userInfo.substringAfter(':')
+                val user = ""//url.userInfo.substringBefore(':')
+                val password = ""//url.userInfo.substringAfter(':')
                 val credential = Credentials.basic(user, password)
                 return response.request.newBuilder()
                     .header("Proxy-Authorization", credential)
                     .build()
             }
         })
-
-        return this
-    }
-
-    /**
-     * Apply HTTP proxy settings from environment variables.
-     */
-    fun OkHttpClient.Builder.applyProxySettingsFromEnv(): OkHttpClient.Builder {
-        Os.proxy?.let { proxyUrl ->
-            try {
-                applyProxySettingsFromUrl(URL(proxyUrl))
-            } catch (e: MalformedURLException) {
-                e.printStackTrace()
-
-                log.warn { "Invalid proxy URL '$proxyUrl' defined in environment." }
-            }
-        }
 
         return this
     }
@@ -100,7 +76,7 @@ object OkHttpClientHelper {
             OkHttpClient.Builder()
                 .cache(cache)
                 .connectionSpecs(specs)
-                .applyProxySettingsFromEnv()
+                .applyProxyAuthenticator()
                 .apply(block)
                 .build()
         }

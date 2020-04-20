@@ -24,6 +24,17 @@ package org.ossreviewtoolkit.analyzer.managers
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ObjectNode
 
+import com.vdurmont.semver4j.Requirement
+
+import java.io.File
+import java.io.FileFilter
+import java.net.HttpURLConnection
+import java.net.ProxySelector
+import java.net.URLEncoder
+import java.util.SortedSet
+
+import okhttp3.Request
+
 import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
 import org.ossreviewtoolkit.analyzer.HTTP_CACHE_PATH
 import org.ossreviewtoolkit.analyzer.PackageManager
@@ -52,25 +63,13 @@ import org.ossreviewtoolkit.spdx.SpdxLicense
 import org.ossreviewtoolkit.utils.CommandLineTool
 import org.ossreviewtoolkit.utils.Os
 import org.ossreviewtoolkit.utils.OkHttpClientHelper
-import org.ossreviewtoolkit.utils.OkHttpClientHelper.applyProxySettingsFromUrl
+import org.ossreviewtoolkit.utils.OrtProxySelector
 import org.ossreviewtoolkit.utils.getUserHomeDirectory
 import org.ossreviewtoolkit.utils.isSymbolicLink
 import org.ossreviewtoolkit.utils.log
 import org.ossreviewtoolkit.utils.realFile
 import org.ossreviewtoolkit.utils.stashDirectories
 import org.ossreviewtoolkit.utils.textValueOrEmpty
-
-import com.vdurmont.semver4j.Requirement
-
-import java.io.File
-import java.io.FileFilter
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
-import java.util.SortedSet
-
-import okhttp3.OkHttpClient
-import okhttp3.Request
 
 /**
  * The [Node package manager](https://www.npmjs.com/) for JavaScript.
@@ -104,10 +103,26 @@ open class Npm(
 
     override fun mapDefinitionFiles(definitionFiles: List<File>) = mapDefinitionFilesForNpm(definitionFiles).toList()
 
-    override fun beforeResolution(definitionFiles: List<File>) =
+    override fun beforeResolution(definitionFiles: List<File>) {
         // We do not actually depend on any features specific to an NPM version, but we still want to stick to a
         // fixed minor version to be sure to get consistent results.
         checkVersion(analyzerConfig.ignoreToolVersions)
+
+        val proxySelector = ProxySelector.getDefault()
+        if (proxySelector is OrtProxySelector) {
+            val npmRcFile = getUserHomeDirectory().resolve(".npmrc")
+            if (npmRcFile.isFile) {
+                proxySelector.addProxyOrigin(managerName, readProxySettingFromNpmRc(npmRcFile.readText()))
+            }
+        }
+    }
+
+    override fun afterResolution(definitionFiles: List<File>) {
+        val proxySelector = ProxySelector.getDefault()
+        if (proxySelector is OrtProxySelector) {
+            proxySelector.removeProxyOrigin(managerName)
+        }
+    }
 
     override fun resolveDependencies(definitionFile: File): ProjectAnalyzerResult? {
         val workingDir = definitionFile.parentFile
@@ -135,15 +150,6 @@ open class Npm(
                 definitionFile, sortedSetOf(dependenciesScope, devDependenciesScope),
                 packages.values.toSortedSet()
             )
-        }
-    }
-
-    private val applyProxySettingsFromNpmRc: OkHttpClient.Builder.() -> Unit = {
-        val npmRcFile = getUserHomeDirectory().resolve(".npmrc")
-        if (npmRcFile.isFile) {
-            readProxySettingFromNpmRc(npmRcFile.readText())?.let { proxyUrl ->
-                applyProxySettingsFromUrl(URL(proxyUrl))
-            }
         }
     }
 
@@ -244,7 +250,7 @@ open class Npm(
                     .url("https://registry.npmjs.org/$encodedName")
                     .build()
 
-                OkHttpClientHelper.execute(HTTP_CACHE_PATH, pkgRequest, applyProxySettingsFromNpmRc).use { response ->
+                OkHttpClientHelper.execute(HTTP_CACHE_PATH, pkgRequest).use { response ->
                     if (response.code == HttpURLConnection.HTTP_OK) {
                         log.debug {
                             if (response.cacheResponse != null) {

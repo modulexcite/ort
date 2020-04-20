@@ -89,6 +89,7 @@ import org.eclipse.aether.transfer.AbstractTransferListener
 import org.eclipse.aether.transfer.NoRepositoryConnectorException
 import org.eclipse.aether.transfer.NoRepositoryLayoutException
 import org.eclipse.aether.transfer.TransferEvent
+import org.eclipse.aether.util.repository.JreProxySelector
 
 fun Artifact.identifier() = "$groupId:$artifactId:$version"
 
@@ -276,6 +277,7 @@ class MavenSupport(workspaceReader: WorkspaceReader) {
             log.debug { "Added $proxyUrl as proxy." }
         }
 
+        settings.addProxy()
         populator.populateFromSettings(request, settings)
         populator.populateDefaults(request)
 
@@ -306,6 +308,7 @@ class MavenSupport(workspaceReader: WorkspaceReader) {
         )
 
         return DefaultRepositorySystemSession(session).setWorkspaceReader(workspaceReader)
+            .setProxySelector(JreProxySelector())
     }
 
     fun buildMavenProject(pomFile: File): ProjectBuildingResult {
