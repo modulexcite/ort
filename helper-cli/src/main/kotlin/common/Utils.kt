@@ -66,6 +66,7 @@ import okhttp3.Request
 
 import okio.buffer
 import okio.sink
+import org.ossreviewtoolkit.spdx.SpdxExpression
 
 const val ORTH_NAME = "orth"
 
@@ -286,7 +287,8 @@ internal fun OrtResult.processAllCopyrightStatements(
 internal fun OrtResult.getLicenseFindingsById(
     id: Identifier,
     packageConfigurationProvider: PackageConfigurationProvider,
-    applyCurations: Boolean = true
+    applyCurations: Boolean = true,
+    decomposeLicenseExpressions: Boolean = true
 ): Map<Provenance, Map<String, Set<TextLocation>>> {
     val result = mutableMapOf<Provenance, MutableMap<String, MutableSet<TextLocation>>>()
 
@@ -306,6 +308,14 @@ internal fun OrtResult.getLicenseFindingsById(
                     FindingCurationMatcher().applyAll(it, getLicenseFindingsCurations(scanResult.provenance))
                 } else {
                     it
+                }
+            }.let { findings ->
+                if (decomposeLicenseExpressions) {
+                    findings.flatMap { finding ->
+                        SpdxExpression.parse(finding.license).decompose().map { finding.copy(license = it.toString()) }
+                    }
+                } else {
+                    findings
                 }
             }
 
