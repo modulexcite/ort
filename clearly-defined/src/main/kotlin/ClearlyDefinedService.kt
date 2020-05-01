@@ -36,6 +36,7 @@ import retrofit2.converter.jackson.JacksonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.PATCH
+import retrofit2.http.POST
 import retrofit2.http.Path
 
 /**
@@ -75,6 +76,16 @@ interface ClearlyDefinedService {
 
         LOCALHOST("http://localhost:4000")
     }
+
+    /**
+     * See https://github.com/clearlydefined/service/blob/4917725/schemas/harvest-1.0.json#L12-L22.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    data class HarvestRequest(
+        val tool: String? = null,
+        val coordinates: Coordinates,
+        val policy: String? = null
+    )
 
     /**
      * See https://github.com/clearlydefined/service/blob/b339cb7/schemas/curation-1.0.json#L7-L16.
@@ -325,6 +336,9 @@ interface ClearlyDefinedService {
         val message: String,
         val stack: String
     )
+
+    @POST("harvest")
+    fun harvest(@Body request: List<HarvestRequest>): Call<Boolean>
 
     /**
      * Get a curation for a component revision, see
