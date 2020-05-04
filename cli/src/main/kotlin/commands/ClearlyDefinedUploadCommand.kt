@@ -114,20 +114,29 @@ class ClearlyDefinedUploadCommand : CliktCommand(
             val responseCode = response.code()
 
             print("Curation ${index + 1} of ${curations.size} for package '${curation.id.toCoordinates()}' ")
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                response.body()?.let { summary ->
-                    println("was successfully uploaded:\n${summary.url}")
-                } ?: log.warn { "The REST API call succeeded but no response body was returned." }
-            } else {
-                println("failed to be uploaded (response code $responseCode).")
 
-                response.errorBody()?.let { errorBody ->
-                    val errorResponse = jsonMapper.readValue(errorBody.string(), ErrorResponse::class.java)
-                    log.error { "The REST API call failed with: ${errorResponse.error.innererror.message}" }
-                    log.debug { errorResponse.error.innererror.stack }
+            when (responseCode) {
+                HttpURLConnection.HTTP_OK -> {
+                    response.body()?.let { summary ->
+                        println("was successfully uploaded:\n${summary.url}")
+                    } ?: log.warn { "The REST API call succeeded but no response body was returned." }
                 }
 
-                error = true
+                HttpURLConnection.HTTP_INTERNAL_ERROR -> {
+
+                }
+
+                else -> {
+                    println("failed to be uploaded (response code $responseCode).")
+
+                    response.errorBody()?.let { errorBody ->
+                        val errorResponse = jsonMapper.readValue(errorBody.string(), ErrorResponse::class.java)
+                        log.error { "The REST API call failed with: ${errorResponse.error.innererror.message}" }
+                        log.debug { errorResponse.error.innererror.stack }
+                    }
+
+                    error = true
+                }
             }
         }
 
